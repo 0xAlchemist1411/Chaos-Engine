@@ -46,8 +46,8 @@ float, "timestep": int, "max_steps": int }
 
 ## 🎯 Tasks
 
-1.  green_corridor_easy --- Low traffic\
-2.  congestion_control_medium --- Medium traffic\
+1.  green_corridor_easy --- Low traffic
+2.  congestion_control_medium --- Medium traffic
 3.  incident_response_hard --- High traffic with dynamic incidents
 
 ---

@@ -7,9 +7,7 @@ from openenv.core.env_server.types import State
 from models import (
     ChaosEngineAction,
     ChaosEngineObservation,
-    ChaosEngineReward,
 )
-
 
 class ChaosEngineEnvironment(Environment):
 
@@ -27,10 +25,14 @@ class ChaosEngineEnvironment(Environment):
     def reset(self) -> ChaosEngineObservation:
         self._state = State(episode_id=str(uuid4()), step_count=0)
 
+        # reset grid properly
         self.grid = [[0 for _ in range(self.grid_size)] for _ in range(self.grid_size)]
+
+        # reset positions
         self.ev_pos = (0, 0)
         self.destination = (9, 9)
 
+        # difficulty setup
         if self.task_id == "green_corridor_easy":
             cars, blocks = 20, 0
         elif self.task_id == "congestion_control_medium":
@@ -40,6 +42,9 @@ class ChaosEngineEnvironment(Environment):
 
         self._spawn_cars(cars)
         self._spawn_blocks(blocks)
+
+        # mark EV AFTER spawning
+        self.grid[self.ev_pos[0]][self.ev_pos[1]] = 2
 
         return ChaosEngineObservation(
             grid=self.grid,
@@ -55,23 +60,44 @@ class ChaosEngineEnvironment(Environment):
             metadata={},
         )
 
-    def step(self, action: ChaosEngineAction) -> ChaosEngineObservation:  # type: ignore[override]
+    def step(self, action: ChaosEngineAction) -> ChaosEngineObservation:
+
+        if not hasattr(self, "ev_pos"):
+            self.reset()
+
         self._state.step_count += 1
+
+        if isinstance(action, dict):
+            action_type = action.get("action_type", "wait")
+        else:
+            action_type = action.action_type
 
         prev_distance = self._distance(self.ev_pos, self.destination)
 
-        # move based on action
-        new_pos = self._move_ev(action.action_type)
+        # compute new position
+        new_pos = self._move_ev(action_type)
 
         reward_value = 0
 
-        # invalid move penalty
+        # block collision
         if self.grid[new_pos[0]][new_pos[1]] == 3:
             reward_value -= 10
+
+        # car collision (treat as obstacle)
+        elif self.grid[new_pos[0]][new_pos[1]] == 1:
+            reward_value -= 5
+
         else:
+            # clear old EV position
+            self.grid[self.ev_pos[0]][self.ev_pos[1]] = 0
+
+            # move EV
             self.ev_pos = new_pos
 
-        # dynamic incidents
+            # mark new position
+            self.grid[self.ev_pos[0]][self.ev_pos[1]] = 2
+
+        # dynamic difficulty
         if self.task_id == "incident_response_hard":
             if random.random() < 0.1:
                 self._spawn_blocks(1)
@@ -121,12 +147,16 @@ class ChaosEngineEnvironment(Environment):
     def _spawn_cars(self, count):
         for _ in range(count):
             x, y = random.randint(0, 9), random.randint(0, 9)
-            self.grid[x][y] = 1
+
+            if (x, y) != self.ev_pos and (x, y) != self.destination:
+                self.grid[x][y] = 1
 
     def _spawn_blocks(self, count):
         for _ in range(count):
             x, y = random.randint(0, 9), random.randint(0, 9)
-            self.grid[x][y] = 3
+
+            if (x, y) != self.ev_pos and (x, y) != self.destination:
+                self.grid[x][y] = 3
 
     def _density(self):
         total = sum(cell == 1 for row in self.grid for cell in row)
@@ -153,4 +183,4 @@ class ChaosEngineEnvironment(Environment):
         return (x, y)
 
     def _summary(self):
-        return f"EV at {self.ev_pos}, destination {self.destination}, traffic density {round(self._density(), 2)}"
+        return f"EV at {self.ev_pos}, destination {self.destination}, density {round(self._density(), 2)}"
