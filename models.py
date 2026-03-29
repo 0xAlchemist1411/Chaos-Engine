@@ -1,27 +1,45 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
-
-"""
-Data models for the Chaos Engine Environment.
-
-The chaos_engine environment is a simple test environment that echoes back messages.
-"""
-
 from openenv.core.env_server.types import Action, Observation
-from pydantic import Field
+from pydantic import Field, BaseModel
+from typing import List, Tuple, Optional
 
 
 class ChaosEngineAction(Action):
-    """Action for the Chaos Engine environment - just a message to echo."""
+    """Actions for traffic control"""
 
-    message: str = Field(..., description="Message to echo back")
+    action_type: str = Field(
+        ..., description="move_up | move_down | move_left | move_right | wait"
+    )
 
 
 class ChaosEngineObservation(Observation):
-    """Observation from the Chaos Engine environment - the echoed message."""
+    """State of the traffic environment"""
 
-    echoed_message: str = Field(default="", description="The echoed message")
-    message_length: int = Field(default=0, description="Length of the echoed message")
+    grid: List[List[int]] = Field(
+        ..., description="10x10 grid (0 empty, 1 vehicle, 2 EV, 3 blocked)"
+    )
+    ev_position: Tuple[int, int] = Field(
+        ..., description="Emergency vehicle position"
+    )
+    ev_destination: Tuple[int, int] = Field(
+        ..., description="Emergency vehicle destination"
+    )
+    traffic_density: float = Field(
+        ..., description="Current traffic density (0–1)"
+    )
+    timestep: int = Field(
+        ..., description="Current timestep"
+    )
+    max_steps: int = Field(
+        ..., description="Max steps per episode"
+    )
+
+    summary: str = Field(..., description="Natural language summary")
+    goal: str = Field(..., description="Task goal")
+    distance_to_goal: int = Field(..., description="Distance to destination")
+
+
+class ChaosEngineReward(BaseModel):
+    """Reward signal"""
+
+    value: float
+    reason: str = ""

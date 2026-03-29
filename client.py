@@ -1,98 +1,58 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
-
-"""Chaos Engine Environment Client."""
-
 from typing import Dict
 
 from openenv.core import EnvClient
 from openenv.core.client_types import StepResult
 from openenv.core.env_server.types import State
 
-from .models import ChaosEngineAction, ChaosEngineObservation
+from .models import (
+    ChaosEngineAction,
+    ChaosEngineObservation,
+    ChaosEngineReward,
+)
 
 
 class ChaosEngineEnv(
     EnvClient[ChaosEngineAction, ChaosEngineObservation, State]
 ):
     """
-    Client for the Chaos Engine Environment.
-
-    This client maintains a persistent WebSocket connection to the environment server,
-    enabling efficient multi-step interactions with lower latency.
-    Each client instance has its own dedicated environment session on the server.
-
-    Example:
-        >>> # Connect to a running server
-        >>> with ChaosEngineEnv(base_url="http://localhost:8000") as client:
-        ...     result = client.reset()
-        ...     print(result.observation.echoed_message)
-        ...
-        ...     result = client.step(ChaosEngineAction(message="Hello!"))
-        ...     print(result.observation.echoed_message)
-
-    Example with Docker:
-        >>> # Automatically start container and connect
-        >>> client = ChaosEngineEnv.from_docker_image("chaos_engine-env:latest")
-        >>> try:
-        ...     result = client.reset()
-        ...     result = client.step(ChaosEngineAction(message="Test"))
-        ... finally:
-        ...     client.close()
+    Client for Chaos Engine (traffic control environment)
     """
 
     def _step_payload(self, action: ChaosEngineAction) -> Dict:
-        """
-        Convert ChaosEngineAction to JSON payload for step message.
-
-        Args:
-            action: ChaosEngineAction instance
-
-        Returns:
-            Dictionary representation suitable for JSON encoding
-        """
         return {
-            "message": action.message,
+            "action_type": action.action_type,
+            "target_id": action.target_id,
+            "value": action.value,
         }
 
     def _parse_result(self, payload: Dict) -> StepResult[ChaosEngineObservation]:
-        """
-        Parse server response into StepResult[ChaosEngineObservation].
-
-        Args:
-            payload: JSON response data from server
-
-        Returns:
-            StepResult with ChaosEngineObservation
-        """
         obs_data = payload.get("observation", {})
+
         observation = ChaosEngineObservation(
-            echoed_message=obs_data.get("echoed_message", ""),
-            message_length=obs_data.get("message_length", 0),
+            grid=obs_data.get("grid", []),
+            ev_position=tuple(obs_data.get("ev_position", (0, 0))),
+            ev_destination=tuple(obs_data.get("ev_destination", (0, 0))),
+            traffic_density=obs_data.get("traffic_density", 0.0),
+            timestep=obs_data.get("timestep", 0),
+            max_steps=obs_data.get("max_steps", 0),
             done=payload.get("done", False),
-            reward=payload.get("reward"),
             metadata=obs_data.get("metadata", {}),
+        )
+
+        reward_data = payload.get("reward", {})
+
+        reward = ChaosEngineReward(
+            value=reward_data.get("value", 0.0),
+            reason=reward_data.get("reason", ""),
         )
 
         return StepResult(
             observation=observation,
-            reward=payload.get("reward"),
+            reward=reward.value,
             done=payload.get("done", False),
         )
 
     def _parse_state(self, payload: Dict) -> State:
-        """
-        Parse server response into State object.
-
-        Args:
-            payload: JSON response from state request
-
-        Returns:
-            State object with episode_id and step_count
-        """
         return State(
             episode_id=payload.get("episode_id"),
             step_count=payload.get("step_count", 0),

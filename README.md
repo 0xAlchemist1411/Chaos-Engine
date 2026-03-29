@@ -1,255 +1,106 @@
----
-title: Chaos Engine Environment Server
-emoji: 🔉
-colorFrom: indigo
-colorTo: red
-sdk: docker
-pinned: false
-app_port: 8000
-base_path: /web
-tags:
-  - openenv
+# Chaos Engine 🚦
+
+Chaos Engine is a real-world traffic control simulation environment
+built using OpenEnv.\
+The goal is to train and evaluate AI agents that can create a **green
+corridor** for emergency vehicles while minimizing disruption to
+civilian traffic.
+
 ---
 
-# Chaos Engine Environment
+## 🚨 Problem Motivation
 
-A simple test environment that echoes back messages. Perfect for testing the env APIs as well as demonstrating environment usage patterns.
+In real cities, ambulances, fire trucks and emergency vehicles lose critical time due
+to traffic congestion.
 
-## Quick Start
+Chaos Engine simulates: - Urban traffic city grid (10x10) - Civilian
+congestion - Road block incidents - Emergency vehicle routing
 
-The simplest way to use the Chaos Engine environment is through the `ChaosEngineEnv` class:
+---
 
-```python
-from chaos_engine import ChaosEngineAction, ChaosEngineEnv
+## 🧠 Environment Overview
 
-try:
-    # Create environment from Docker image
-    chaos_engineenv = ChaosEngineEnv.from_docker_image("chaos_engine-env:latest")
+### Observation Space
 
-    # Reset
-    result = chaos_engineenv.reset()
-    print(f"Reset: {result.observation.echoed_message}")
+{ "city grid": "10x10 grid (0 empty, 1 vehicle, 2 EV, 3 blocked)",
+"ev_position": \[x, y\], "ev_destination": \[x, y\], "traffic_density":
+float, "timestep": int, "max_steps": int }
 
-    # Send multiple messages
-    messages = ["Hello, World!", "Testing echo", "Final message"]
+---
 
-    for msg in messages:
-        result = chaos_engineenv.step(ChaosEngineAction(message=msg))
-        print(f"Sent: '{msg}'")
-        print(f"  → Echoed: '{result.observation.echoed_message}'")
-        print(f"  → Length: {result.observation.message_length}")
-        print(f"  → Reward: {result.reward}")
+### Action Space
 
-finally:
-    # Always clean up
-    chaos_engineenv.close()
-```
+{ "action_type": "signal \| reroute \| noop", "target_id": "optional",
+"value": "optional" }
 
-That's it! The `ChaosEngineEnv.from_docker_image()` method handles:
-- Starting the Docker container
-- Waiting for the server to be ready
-- Connecting to the environment
-- Container cleanup when you call `close()`
+---
 
-## Building the Docker Image
+### Reward Design
 
-Before using the environment, you need to build the Docker image:
+- +progress toward destination
+- +100 on success
+- -traffic congestion penalty
+- -gridlock penalty
 
-```bash
-# From project root
-docker build -t chaos_engine-env:latest -f server/Dockerfile .
-```
+---
 
-## Deploying to Hugging Face Spaces
+## 🎯 Tasks
 
-You can easily deploy your OpenEnv environment to Hugging Face Spaces using the `openenv push` command:
+1.  green_corridor_easy --- Low traffic\
+2.  congestion_control_medium --- Medium traffic\
+3.  incident_response_hard --- High traffic with dynamic incidents
 
-```bash
-# From the environment directory (where openenv.yaml is located)
-openenv push
+---
 
-# Or specify options
-openenv push --namespace my-org --private
-```
+## 🎥 Demo
 
-The `openenv push` command will:
-1. Validate that the directory is an OpenEnv environment (checks for `openenv.yaml`)
-2. Prepare a custom build for Hugging Face Docker space (enables web interface)
-3. Upload to Hugging Face (ensuring you're logged in)
+The Chaos Engine demonstrates real-time emergency traffic coordination.
 
-### Prerequisites
+Key behaviors:
+- Creates a green corridor dynamically
+- Avoids congestion hotspots
+- Adapts to unexpected roadblocks
 
-- Authenticate with Hugging Face: The command will prompt for login if not already authenticated
+This environment simulates real-world urban traffic control systems used in smart cities.
 
-### Options
+---
 
-- `--directory`, `-d`: Directory containing the OpenEnv environment (defaults to current directory)
-- `--repo-id`, `-r`: Repository ID in format 'username/repo-name' (defaults to 'username/env-name' from openenv.yaml)
-- `--base-image`, `-b`: Base Docker image to use (overrides Dockerfile FROM)
-- `--private`: Deploy the space as private (default: public)
+## ⚙️ Setup
 
-### Examples
+uv sync
 
-```bash
-# Push to your personal namespace (defaults to username/env-name from openenv.yaml)
-openenv push
+---
 
-# Push to a specific repository
-openenv push --repo-id my-org/my-env
+## 🐳 Docker
 
-# Push with a custom base image
-openenv push --base-image ghcr.io/meta-pytorch/openenv-base:latest
+docker build -t chaos_engine . docker run -p 8000:8000 chaos_engine
 
-# Push as a private space
-openenv push --private
+---
 
-# Combine options
-openenv push --repo-id my-org/my-env --base-image custom-base:latest --private
-```
+## 🤖 Inference
 
-After deployment, your space will be available at:
-`https://huggingface.co/spaces/<repo-id>`
+python inference.py
 
-The deployed space includes:
-- **Web Interface** at `/web` - Interactive UI for exploring the environment
-- **API Documentation** at `/docs` - Full OpenAPI/Swagger interface
-- **Health Check** at `/health` - Container health monitoring
-- **WebSocket** at `/ws` - Persistent session endpoint for low-latency interactions
+Environment variables: API_BASE_URL, MODEL_NAME, HF_TOKEN
 
-## Environment Details
+---
 
-### Action
-**ChaosEngineAction**: Contains a single field
-- `message` (str) - The message to echo back
+## 📊 Baseline Performance
 
-### Observation
-**ChaosEngineObservation**: Contains the echo response and metadata
-- `echoed_message` (str) - The message echoed back
-- `message_length` (int) - Length of the message
-- `reward` (float) - Reward based on message length (length × 0.1)
-- `done` (bool) - Always False for echo environment
-- `metadata` (dict) - Additional info like step count
+Task Score
 
-### Reward
-The reward is calculated as: `message_length × 0.1`
-- "Hi" → reward: 0.2
-- "Hello, World!" → reward: 1.3
-- Empty message → reward: 0.0
+---
 
-## Advanced Usage
+Easy High
+Medium Moderate
+Hard Challenging
 
-### Connecting to an Existing Server
+---
 
-If you already have a Chaos Engine environment server running, you can connect directly:
+## 🏆 Features
 
-```python
-from chaos_engine import ChaosEngineEnv
-
-# Connect to existing server
-chaos_engineenv = ChaosEngineEnv(base_url="<ENV_HTTP_URL_HERE>")
-
-# Use as normal
-result = chaos_engineenv.reset()
-result = chaos_engineenv.step(ChaosEngineAction(message="Hello!"))
-```
-
-Note: When connecting to an existing server, `chaos_engineenv.close()` will NOT stop the server.
-
-### Using the Context Manager
-
-The client supports context manager usage for automatic connection management:
-
-```python
-from chaos_engine import ChaosEngineAction, ChaosEngineEnv
-
-# Connect with context manager (auto-connects and closes)
-with ChaosEngineEnv(base_url="http://localhost:8000") as env:
-    result = env.reset()
-    print(f"Reset: {result.observation.echoed_message}")
-    # Multiple steps with low latency
-    for msg in ["Hello", "World", "!"]:
-        result = env.step(ChaosEngineAction(message=msg))
-        print(f"Echoed: {result.observation.echoed_message}")
-```
-
-The client uses WebSocket connections for:
-- **Lower latency**: No HTTP connection overhead per request
-- **Persistent session**: Server maintains your environment state
-- **Efficient for episodes**: Better for many sequential steps
-
-### Concurrent WebSocket Sessions
-
-The server supports multiple concurrent WebSocket connections. To enable this,
-modify `server/app.py` to use factory mode:
-
-```python
-# In server/app.py - use factory mode for concurrent sessions
-app = create_app(
-    ChaosEngineEnvironment,  # Pass class, not instance
-    ChaosEngineAction,
-    ChaosEngineObservation,
-    max_concurrent_envs=4,  # Allow 4 concurrent sessions
-)
-```
-
-Then multiple clients can connect simultaneously:
-
-```python
-from chaos_engine import ChaosEngineAction, ChaosEngineEnv
-from concurrent.futures import ThreadPoolExecutor
-
-def run_episode(client_id: int):
-    with ChaosEngineEnv(base_url="http://localhost:8000") as env:
-        result = env.reset()
-        for i in range(10):
-            result = env.step(ChaosEngineAction(message=f"Client {client_id}, step {i}"))
-        return client_id, result.observation.message_length
-
-# Run 4 episodes concurrently
-with ThreadPoolExecutor(max_workers=4) as executor:
-    results = list(executor.map(run_episode, range(4)))
-```
-
-## Development & Testing
-
-### Direct Environment Testing
-
-Test the environment logic directly without starting the HTTP server:
-
-```bash
-# From the server directory
-python3 server/chaos_engine_environment.py
-```
-
-This verifies that:
-- Environment resets correctly
-- Step executes actions properly
-- State tracking works
-- Rewards are calculated correctly
-
-### Running Locally
-
-Run the server locally for development:
-
-```bash
-uvicorn server.app:app --reload
-```
-
-## Project Structure
-
-```
-chaos_engine/
-├── .dockerignore         # Docker build exclusions
-├── __init__.py            # Module exports
-├── README.md              # This file
-├── openenv.yaml           # OpenEnv manifest
-├── pyproject.toml         # Project metadata and dependencies
-├── uv.lock                # Locked dependencies (generated)
-├── client.py              # ChaosEngineEnv client
-├── models.py              # Action and Observation models
-└── server/
-    ├── __init__.py        # Server module exports
-    ├── chaos_engine_environment.py  # Core environment logic
-    ├── app.py             # FastAPI application (HTTP + WebSocket endpoints)
-    └── Dockerfile         # Container image definition
-```
+- Real-world traffic simulation
+- Dynamic incidents
+- Dense reward shaping
+- OpenEnv compliant
+- Dockerized server

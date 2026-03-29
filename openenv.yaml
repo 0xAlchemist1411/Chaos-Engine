@@ -1,7 +1,33 @@
 spec_version: 1
-name: chaos_engine
-type: space
-runtime: fastapi
-app: server.app:app
-port: 8000
 
+name: chaos_engine
+description: >
+  Chaos Engine is a real-world traffic control simulation where an AI agent
+  creates a green corridor for emergency vehicles while minimizing civilian disruption.
+
+type: environment
+
+entrypoint: app:app
+
+models:
+  observation: Observation
+  action: Action
+  reward: Reward
+
+tasks:
+  - id: green_corridor_easy
+    description: Low traffic, simple corridor creation
+    difficulty: easy
+
+  - id: congestion_control_medium
+    description: Medium traffic, balance EV priority and flow
+    difficulty: medium
+
+  - id: incident_response_hard
+    description: High traffic with dynamic accidents
+    difficulty: hard
+
+metadata:
+  author: chaos-engine-team
+  domain: urban-traffic-control
+  difficulty: medium-hard

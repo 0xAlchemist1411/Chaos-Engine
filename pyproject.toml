@@ -1,46 +1,64 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
-
-[build-system]
-requires = ["setuptools>=45", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "openenv-chaos_engine"
-team = "Alchemist"
-version = "0.1.0"
-description = "Chaos Engine environment for OpenEnv"
-requires-python = ">=3.10"
-dependencies = [
-    # Core OpenEnv runtime (provides FastAPI server + HTTP client types)
-    # install from github
-    # "openenv-core[core] @ git+https://github.com/meta-pytorch/OpenEnv.git",
-    "openenv-core[core]>=0.2.2",
-    # Environment-specific dependencies
-    # Add all dependencies needed for your environment here
-    # Examples:
-    # "numpy>=1.19.0",
-    # "torch>=2.0.0",
-    # "gymnasium>=0.29.0",
-    # "openspiel>=1.0.0",
-    # "smolagents>=1.22.0,<2",
+name = "chaos_engine"
+version = "1.0.0"
+description = """
+Chaos Engine is a real-world environment designed to test and benchmark AI agents
+in handling complex, dynamic, and unpredictable traffic scenarios. It simulates
+urban traffic where agents must create green corridors for emergency vehicles
+while minimizing disruption.
+"""
+authors = [
+  { name = "Deepak S" },
+  { name = "Aman K" },
+  { name = "Ambesh G" }
 ]
+readme = "README.md"
+requires-python = ">=3.10"
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.0.0",
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn>=0.24.0",
+  "requests>=2.31.0",
+  "openenv-core>=0.1.13"
 ]
 
 [project.scripts]
-# Server entry point - enables running via: uv run --project . server
-# or: python -m chaos_engine.server.app
-server = "chaos_engine.server.app:main"
+server = "server.app:main"
 
-[tool.setuptools]
-include-package-data = true
-packages = ["chaos_engine", "chaos_engine.server"]
-package-dir = { "chaos_engine" = ".", "chaos_engine.server" = "server" }
+[tool.openenv]
+name = "chaos_engine"
+description = "Traffic coordination environment for emergency routing"
+
+tags = [
+  "openenv",
+  "real-world-environment",
+  "agent-benchmarking",
+  "traffic",
+  "emergency-response"
+]
+
+[tool.openenv.models]
+action = "models.ChaosEngineAction"
+observation = "models.ChaosEngineObservation"
+
+[tool.openenv.server]
+app = "server.app:app"
+port = 8000
+
+[[tool.openenv.tasks]]
+id = "green_corridor_easy"
+name = "Easy Corridor"
+description = "Low traffic, simple path to destination."
+difficulty = "easy"
+
+[[tool.openenv.tasks]]
+id = "congestion_control_medium"
+name = "Congestion Control"
+description = "Moderate traffic with obstacles."
+difficulty = "medium"
+
+[[tool.openenv.tasks]]
+id = "incident_response_hard"
+name = "Incident Response"
+description = "High traffic with dynamic accidents."
+difficulty = "hard"
