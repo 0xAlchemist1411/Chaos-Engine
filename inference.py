@@ -9,8 +9,8 @@ load_dotenv()
 
 API_BASE_URL = os.getenv("API_BASE_URL")
 MODEL_NAME   = os.getenv("MODEL_NAME")
-HF_TOKEN     = os.getenv("HF_TOKEN")
-BASE_URL     = os.getenv("BASE_URL") or "http://localhost:8000"
+HF_TOKEN     = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
+BASE_URL     = "http://localhost:8000"
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
@@ -20,16 +20,16 @@ VALID_ACTIONS = {"move_up", "move_down", "move_left", "move_right"}
 
 SYSTEM_PROMPT = """You are an intelligent RL agent controlling an emergency vehicle.
 
-Goal: Reach destination FAST.
+                Goal: Reach destination FAST.
 
-Avoid:
-- Blocks (#)
-- Traffic (C)
+                Avoid:
+                - Blocks (#)
+                - Traffic (C)
 
-Learn from previous steps.
-Return ONLY JSON:
-{"reasoning": "...", "action": "move_down"}
-"""
+                Learn from previous steps.
+                Return ONLY JSON:
+                {"reasoning": "...", "action": "move_down"}
+            """
 
 # ---------------- GRID RENDER ----------------
 
@@ -68,23 +68,23 @@ def build_prompt(obs, history, strict=False):
         strict_msg = "\nONLY JSON OUTPUT ALLOWED."
 
     return f"""
-GRID:
-{render_grid(obs)}
+        GRID:
+        {render_grid(obs)}
 
-STATE:
-EV: {obs["ev_position"]}
-DEST: {obs["ev_destination"]}
-DISTANCE: {obs["distance_to_goal"]}
-DENSITY: {obs["traffic_density"]}
+        STATE:
+        EV: {obs["ev_position"]}
+        DEST: {obs["ev_destination"]}
+        DISTANCE: {obs["distance_to_goal"]}
+        DENSITY: {obs["traffic_density"]}
 
-HISTORY:
-{hist}
+        HISTORY:
+        {hist}
 
-{strict_msg}
+        {strict_msg}
 
-Return JSON:
-{{"reasoning": "...", "action": "move_up/down/left/right"}}
-"""
+        Return JSON:
+        {{"reasoning": "...", "action": "move_up/down/left/right"}}
+        """
 
 # ---------------- PARSE ----------------
 
@@ -130,7 +130,7 @@ def ask_llm(obs, history):
         except Exception as e:
             print("LLM ERROR:", e)
 
-    return "move_down"  # minimal fallback
+    return "wait"  # minimal fallback
 
 # ---------------- ACTION ----------------
 
