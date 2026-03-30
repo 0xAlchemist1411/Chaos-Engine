@@ -1,9 +1,4 @@
-try:
-    from openenv.core.env_server.http_server import create_app
-except Exception as e:
-    raise ImportError(
-        "openenv is required. Install with:\n    uv sync\n"
-    ) from e
+from openenv.core.env_server.http_server import create_app
 
 from models import (
     ChaosEngineAction,
@@ -33,7 +28,6 @@ def render():
         "ev": getattr(env, "ev_pos", None),
         "destination": getattr(env, "destination", None),
     }
-
 
 def main():
     import uvicorn

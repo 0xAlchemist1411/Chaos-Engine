@@ -1,143 +1,189 @@
 import os
+import re
+import json
 import requests
 from openai import OpenAI
 from dotenv import load_dotenv
-from collections import deque
 
 load_dotenv()
 
 API_BASE_URL = os.getenv("API_BASE_URL")
-MODEL_NAME = os.getenv("MODEL_NAME")
-HF_TOKEN = os.getenv("HF_TOKEN")
-BASE_URL = os.getenv("BASE_URL") or "http://localhost:8000"
+MODEL_NAME   = os.getenv("MODEL_NAME")
+HF_TOKEN     = os.getenv("HF_TOKEN")
+BASE_URL     = os.getenv("BASE_URL") or "http://localhost:8000"
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
-def get_best_move(observation):
-    grid = observation.get("grid")
-    start = tuple(observation.get("ev_position"))
-    target = tuple(observation.get("ev_destination"))
+VALID_ACTIONS = {"move_up", "move_down", "move_left", "move_right"}
 
-    directions = [
-        ("move_up", (-1, 0)),
-        ("move_down", (1, 0)),
-        ("move_left", (0, -1)),
-        ("move_right", (0, 1)),
-    ]
+# ---------------- SYSTEM PROMPT ----------------
 
-    queue = deque([(start, [])])
-    visited = set([start])
+SYSTEM_PROMPT = """You are an intelligent RL agent controlling an emergency vehicle.
 
-    while queue:
-        (x, y), path = queue.popleft()
+Goal: Reach destination FAST.
 
-        if (x, y) == target:
-            return path[0] if path else "wait"
+Avoid:
+- Blocks (#)
+- Traffic (C)
 
-        for action, (dx, dy) in directions:
-            nx, ny = x + dx, y + dy
+Learn from previous steps.
+Return ONLY JSON:
+{"reasoning": "...", "action": "move_down"}
+"""
 
-            if 0 <= nx < 10 and 0 <= ny < 10:
-                if (nx, ny) not in visited and grid[nx][ny] != 3:
-                    visited.add((nx, ny))
-                    queue.append(((nx, ny), path + [action]))
+# ---------------- GRID RENDER ----------------
 
-    return "wait"
+def render_grid(obs):
+    grid = obs["grid"]
+    ev   = tuple(obs["ev_position"])
+    dest = tuple(obs["ev_destination"])
 
+    symbols = {0: ".", 1: "C", 2: "E", 3: "#"}
+    rows = []
 
-def get_action(observation):
-    bfs_action = get_best_move(observation)
+    for r in range(len(grid)):
+        row = []
+        for c in range(len(grid)):
+            if (r, c) == ev:
+                row.append("E")
+            elif (r, c) == dest:
+                row.append("D")
+            else:
+                row.append(symbols.get(grid[r][c], "?"))
+        rows.append(" ".join(row))
 
-    action = bfs_action
+    return "\n".join(rows)
 
-    import random
-    if random.random() < 0.1:
+# ---------------- PROMPT ----------------
+
+def build_prompt(obs, history, strict=False):
+
+    hist = "\n".join([
+        f"Step {h['step']}: {h['action']} -> {h['outcome']}"
+        for h in history[-5:]
+    ]) if history else "None"
+
+    strict_msg = ""
+    if strict:
+        strict_msg = "\nONLY JSON OUTPUT ALLOWED."
+
+    return f"""
+GRID:
+{render_grid(obs)}
+
+STATE:
+EV: {obs["ev_position"]}
+DEST: {obs["ev_destination"]}
+DISTANCE: {obs["distance_to_goal"]}
+DENSITY: {obs["traffic_density"]}
+
+HISTORY:
+{hist}
+
+{strict_msg}
+
+Return JSON:
+{{"reasoning": "...", "action": "move_up/down/left/right"}}
+"""
+
+# ---------------- PARSE ----------------
+
+def parse_action(text):
+    text = re.sub(r"```.*?```", "", text, flags=re.DOTALL).strip()
+
+    try:
+        data = json.loads(text)
+        action = data.get("action", "").strip().lower()
+        if action in VALID_ACTIONS:
+            return action
+    except:
+        pass
+
+    for a in VALID_ACTIONS:
+        if a in text:
+            return a
+
+    return None
+
+# ---------------- LLM ----------------
+
+def ask_llm(obs, history):
+    for i in range(3):
+        strict = (i > 0)
+
         try:
-            response = client.chat.completions.create(
+            res = client.chat.completions.create(
                 model=MODEL_NAME,
-                messages=[{
-                    "role": "user",
-                    "content": f"""
-                        You are controlling an emergency vehicle.
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": build_prompt(obs, history, strict)},
+                ],
+                temperature=0.2,
+            )
 
-                        Current state:
-                        {observation}
+            raw = res.choices[0].message.content.strip()
+            action = parse_action(raw)
 
-                        Suggest best move:
-                        move_up, move_down, move_left, move_right
+            if action:
+                return action
 
-                        Return ONLY one word.
-                        """
-                }],
-            temperature=0.2,
-        )
+        except Exception as e:
+            print("LLM ERROR:", e)
 
-            llm_action = response.choices[0].message.content.strip().lower()
-            llm_action = llm_action.replace(" ", "_")
+    return "move_down"  # minimal fallback
 
-            if llm_action in ["move_up", "move_down", "move_left", "move_right"]:
-                action = llm_action
+# ---------------- ACTION ----------------
 
-        except:
-            pass
-
-    if action == "wait":
-        ev = observation["ev_position"]
-        dest = observation["ev_destination"]
-
-        if ev[0] < dest[0]:
-            action = "move_down"
-        elif ev[0] > dest[0]:
-            action = "move_up"
-        elif ev[1] < dest[1]:
-            action = "move_right"
-        elif ev[1] > dest[1]:
-            action = "move_left"
-
+def get_action(obs, history):
+    action = ask_llm(obs, history)
     return {"action_type": action}
 
+# ---------------- GRADING ----------------
+
 def grade(task_id, obs, steps):
-    distance = obs.get("distance_to_goal", 20)
+    dist = obs.get("distance_to_goal", 20)
 
     if task_id == "green_corridor_easy":
-        return 1.0 if distance == 0 else max(0, 1 - distance / 20)
+        return 1.0 if dist == 0 else max(0, 1 - dist / 20)
 
     elif task_id == "congestion_control_medium":
-        return max(0, 1 - distance / 25)
+        return max(0, 1 - dist / 25)
 
     elif task_id == "incident_response_hard":
-        score = 0
-
-        if distance == 0:
-            score += 0.6
+        score = max(0, 1 - dist / 30)
 
         if steps < 30:
-            score += 0.2
+            score += 0.1
 
         if obs.get("traffic_density", 1) < 0.5:
-            score += 0.2
+            score += 0.1
 
         return min(score, 1.0)
 
+# ---------------- RUN ----------------
 
 def run_task(task_id):
-    obs = requests.post(
+
+    resp = requests.post(
         f"{BASE_URL}/reset",
-        json={"task_id": task_id}
+        json={"task_id": task_id},
     ).json()
 
-    if "observation" in obs:
-        obs = obs["observation"]
+    if "observation" not in resp:
+        raise Exception(f"Reset failed: {resp}")
 
+    obs = resp["observation"]
+
+    history = []
     total_reward = 0
 
-    for step in range(30):
-        action = get_action(obs)
+    for step in range(50):
+
+        action = get_action(obs, history)
 
         response = requests.post(
             f"{BASE_URL}/step",
             json={"action": action},
-            headers={"Content-Type": "application/json"}
         )
 
         try:
@@ -146,36 +192,49 @@ def run_task(task_id):
             print("ERROR:", response.text)
             break
 
-        # observation
-        if "observation" in res:
-            obs = res["observation"]
-        else:
-            obs = res
+        if "observation" not in res:
+            print("INVALID:", res)
+            break
 
-        # reward
+        new_obs = res["observation"]
+
         reward = res.get("reward", 0)
         if isinstance(reward, dict):
             reward = reward.get("value", 0)
 
         total_reward += reward
 
-        # done
-        done = res.get("done", False)
-        if not done and "observation" in res:
-            done = res["observation"].get("done", False)
+        outcome = "improved" if new_obs["distance_to_goal"] < obs["distance_to_goal"] else "worse"
 
-        if done:
+        history.append({
+            "step": step,
+            "action": action["action_type"],
+            "outcome": outcome
+        })
+
+        obs = new_obs
+
+        if res.get("done", False):
             break
 
     return grade(task_id, obs, step + 1)
+
+# ---------------- MAIN ----------------
 
 if __name__ == "__main__":
     tasks = [
         "green_corridor_easy",
         "congestion_control_medium",
-        "incident_response_hard"
+        "incident_response_hard",
     ]
 
-    for task in tasks:
-        score = run_task(task)
-        print(f"{task}: {score}")
+    results = {}
+
+    for t in tasks:
+        results[t] = run_task(t)
+
+    print("\nFINAL SCORES:")
+    for k, v in results.items():
+        print(f"{k}: {v:.3f}")
+
+    print("Average:", sum(results.values()) / len(results))

@@ -15,7 +15,7 @@ class ChaosEngineObservation(Observation):
     """State of the traffic environment"""
 
     grid: List[List[int]] = Field(
-        ..., description="10x10 grid (0 empty, 1 vehicle, 2 EV, 3 blocked)"
+        ..., description="NxN grid (0 empty, 1 vehicle, 2 EV, 3 blocked)"
     )
     ev_position: Tuple[int, int] = Field(
         ..., description="Emergency vehicle position"

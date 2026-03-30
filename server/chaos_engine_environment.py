@@ -22,139 +22,128 @@ class ChaosEngineEnvironment(Environment):
 
         self._state = State(episode_id=str(uuid4()), step_count=0)
 
-    def reset(self) -> ChaosEngineObservation:
+        self.grid = [[0 for _ in range(self.grid_size)] for _ in range(self.grid_size)]
+        self.ev_pos = (0, 0)
+        self.destination = (self.grid_size - 1, self.grid_size - 1)
+
+    def reset(self, task_id: str = None) -> ChaosEngineObservation:
         self._state = State(episode_id=str(uuid4()), step_count=0)
 
-        # reset grid properly
+        if task_id:
+            self.task_id = task_id
+
         self.grid = [[0 for _ in range(self.grid_size)] for _ in range(self.grid_size)]
 
-        # reset positions
         self.ev_pos = (0, 0)
-        self.destination = (9, 9)
+        self.destination = (self.grid_size - 1, self.grid_size - 1)
 
-        # difficulty setup
         if self.task_id == "green_corridor_easy":
-            cars, blocks = 20, 0
+            cars, blocks = 10, 0
+
         elif self.task_id == "congestion_control_medium":
-            cars, blocks = 50, 5
-        else:
-            cars, blocks = 70, 8
+            cars, blocks = 40, 10
+
+        else:  # hard
+            cars, blocks = 70, 20
 
         self._spawn_cars(cars)
         self._spawn_blocks(blocks)
 
-        # mark EV AFTER spawning
         self.grid[self.ev_pos[0]][self.ev_pos[1]] = 2
 
+        return self._build_obs(done=False, reward=0)
+
+    def step(self, action: ChaosEngineAction) -> ChaosEngineObservation:
+
+        self._state.step_count += 1
+
+        action_type = action.get("action_type") if isinstance(action, dict) else action.action_type
+
+        prev_distance = self._distance(self.ev_pos, self.destination)
+
+        new_pos = self._move_ev(action_type)
+
+        reward = 0
+
+        cell = self.grid[new_pos[0]][new_pos[1]]
+
+        if cell == 3:
+            reward -= 15
+
+        else:
+            self.grid[self.ev_pos[0]][self.ev_pos[1]] = 0
+
+            # ⚠️ CAR
+            if cell == 1:
+                reward -= 3
+
+            self.ev_pos = new_pos
+            self.grid[self.ev_pos[0]][self.ev_pos[1]] = 2
+
+        if self.task_id == "incident_response_hard":
+            if random.random() < 0.2:
+                self._spawn_blocks(2)
+
+        new_distance = self._distance(self.ev_pos, self.destination)
+
+        progress = (prev_distance - new_distance)
+        reward += progress * 3
+
+        if progress == 0:
+            reward -= 5
+
+        density = self._density()
+        reward -= density * 20
+
+        reached = self.ev_pos == self.destination
+
+        if reached:
+            reward += 200
+
+        done = reached or self._state.step_count >= self.max_steps
+
+        return self._build_obs(done=done, reward=reward)
+
+    @property
+    def state(self) -> State:
+        return State(
+            episode_id=self._state.episode_id,
+            step_count=self._state.step_count,
+            metadata={
+                "ev_position": self.ev_pos,
+                "destination": self.destination,
+                "distance": self._distance(self.ev_pos, self.destination),
+                "traffic_density": self._density(),
+            }
+        )
+
+    # ---------------- HELPERS ----------------
+
+    def _build_obs(self, done, reward):
         return ChaosEngineObservation(
             grid=self.grid,
             ev_position=self.ev_pos,
             ev_destination=self.destination,
             traffic_density=self._density(),
-            timestep=0,
-            max_steps=self.max_steps,
-            summary=self._summary(),
-            goal="Move the emergency vehicle to destination as fast as possible",
-            distance_to_goal=self._distance(self.ev_pos, self.destination),
-            done=False,
-            metadata={},
-        )
-
-    def step(self, action: ChaosEngineAction) -> ChaosEngineObservation:
-
-        if not hasattr(self, "ev_pos"):
-            self.reset()
-
-        self._state.step_count += 1
-
-        if isinstance(action, dict):
-            action_type = action.get("action_type", "wait")
-        else:
-            action_type = action.action_type
-
-        prev_distance = self._distance(self.ev_pos, self.destination)
-
-        # compute new position
-        new_pos = self._move_ev(action_type)
-
-        reward_value = 0
-
-        # block collision
-        if self.grid[new_pos[0]][new_pos[1]] == 3:
-            reward_value -= 10
-
-        # car collision (treat as obstacle)
-        elif self.grid[new_pos[0]][new_pos[1]] == 1:
-            reward_value -= 5
-
-        else:
-            # clear old EV position
-            self.grid[self.ev_pos[0]][self.ev_pos[1]] = 0
-
-            # move EV
-            self.ev_pos = new_pos
-
-            # mark new position
-            self.grid[self.ev_pos[0]][self.ev_pos[1]] = 2
-
-        # dynamic difficulty
-        if self.task_id == "incident_response_hard":
-            if random.random() < 0.1:
-                self._spawn_blocks(1)
-
-        new_distance = self._distance(self.ev_pos, self.destination)
-
-        # discourage useless moves
-        if prev_distance == new_distance:
-            reward_value -= 2
-
-        # reward shaping
-        reward_value += (prev_distance - new_distance)
-
-        reached = self.ev_pos == self.destination
-        if reached:
-            reward_value += 100
-
-        density = self._density()
-        reward_value -= density * 10
-
-        done = reached or self._state.step_count >= self.max_steps
-
-        return ChaosEngineObservation(
-            grid=self.grid,
-            ev_position=self.ev_pos,
-            ev_destination=self.destination,
-            traffic_density=density,
             timestep=self._state.step_count,
             max_steps=self.max_steps,
             summary=self._summary(),
-            goal="Move the emergency vehicle to destination as fast as possible",
+            goal="Reach destination fast avoiding congestion",
             distance_to_goal=self._distance(self.ev_pos, self.destination),
             done=done,
-            reward=reward_value,
-            metadata={
-                "distance": self._distance(self.ev_pos, self.destination),
-                "density": density
-            },
+            reward=reward,
+            metadata={}
         )
-
-    @property
-    def state(self) -> State:
-        return self._state
-
-    # ---------------- helpers ----------------
 
     def _spawn_cars(self, count):
         for _ in range(count):
             x, y = random.randint(0, 9), random.randint(0, 9)
-
             if (x, y) != self.ev_pos and (x, y) != self.destination:
                 self.grid[x][y] = 1
 
     def _spawn_blocks(self, count):
         for _ in range(count):
             x, y = random.randint(0, 9), random.randint(0, 9)
-
             if (x, y) != self.ev_pos and (x, y) != self.destination:
                 self.grid[x][y] = 3
 
@@ -165,16 +154,16 @@ class ChaosEngineEnvironment(Environment):
     def _distance(self, a, b):
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
-    def _move_ev(self, action_type):
+    def _move_ev(self, action):
         x, y = self.ev_pos
 
-        if action_type == "move_up":
+        if action == "move_up":
             x -= 1
-        elif action_type == "move_down":
+        elif action == "move_down":
             x += 1
-        elif action_type == "move_left":
+        elif action == "move_left":
             y -= 1
-        elif action_type == "move_right":
+        elif action == "move_right":
             y += 1
 
         x = max(0, min(9, x))
@@ -183,4 +172,4 @@ class ChaosEngineEnvironment(Environment):
         return (x, y)
 
     def _summary(self):
-        return f"EV at {self.ev_pos}, destination {self.destination}, density {round(self._density(), 2)}"
+        return f"EV at {self.ev_pos}, dest {self.destination}, density {round(self._density(), 2)}"
