@@ -1,3 +1,14 @@
+---
+title: Chaos Engine
+emoji: 🚦
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+app_port: 8000
+pinned: false
+license: mit
+---
+
 # Chaos Engine 🚦
 
 Chaos Engine is a real-world traffic control simulation environment
