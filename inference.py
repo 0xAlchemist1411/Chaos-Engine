@@ -4,20 +4,40 @@ import json
 import requests
 from openai import OpenAI
 from dotenv import load_dotenv
+from typing import List, Optional
 import random
 
 load_dotenv()
 
 API_BASE_URL = os.getenv("API_BASE_URL")
 MODEL_NAME   = os.getenv("MODEL_NAME")
-HF_TOKEN     = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
+HF_TOKEN     = os.getenv("HF_TOKEN")
 BASE_URL     = "http://localhost:8000"
+BENCHMARK    = "chaos_engine"
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
-VALID_ACTIONS = {"move_up", "move_down", "move_left", "move_right"}
 
-# ---------------- SYSTEM PROMPT ----------------
+# ================ LOGGING ================
+
+def log_start(task: str, env: str, model: str) -> None:
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
+    error_val = error if error else "null"
+    done_val = True
+    print(
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}",
+        flush=True,
+    )
+
+
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
+
+VALID_ACTIONS = {"move_up", "move_down", "move_left", "move_right"}
 
 SYSTEM_PROMPT = """You are an intelligent RL agent controlling an emergency vehicle.
 
@@ -32,7 +52,6 @@ SYSTEM_PROMPT = """You are an intelligent RL agent controlling an emergency vehi
                 {"reasoning": "...", "action": "move_down"}
             """
 
-# ---------------- GRID RENDER ----------------
 
 def render_grid(obs):
     grid = obs["grid"]
@@ -55,7 +74,6 @@ def render_grid(obs):
 
     return "\n".join(rows)
 
-# ---------------- PROMPT ----------------
 
 def build_prompt(obs, history, strict=False):
 
@@ -87,7 +105,6 @@ def build_prompt(obs, history, strict=False):
         {{"reasoning": "...", "action": "move_up/down/left/right"}}
         """
 
-# ---------------- PARSE ----------------
 
 def parse_action(text):
     text = re.sub(r"```.*?```", "", text, flags=re.DOTALL).strip()
@@ -106,7 +123,6 @@ def parse_action(text):
 
     return None
 
-# ---------------- LLM ----------------
 
 def ask_llm(obs, history):
     for i in range(3):
@@ -161,40 +177,48 @@ def grade(task_id, obs, steps):
 
         return min(score, 1.0)
 
-# ---------------- RUN ----------------
+# ================ RUN ================
 
-def run_task(task_id):
-
-    resp = requests.post(
-        f"{BASE_URL}/reset",
-        json={"task_id": task_id},
-    ).json()
+def run_task(task_id: str) -> tuple:
+    """Run a single task and return (final_score, rewards_list, steps_taken)"""
+    
+    try:
+        resp = requests.post(
+            f"{BASE_URL}/reset",
+            json={"task_id": task_id},
+        ).json()
+    except Exception as e:
+        return 0.0, [], 0
 
     if "observation" not in resp:
-        raise Exception(f"Reset failed: {resp}")
+        return 0.0, [], 0
 
     obs = resp["observation"]
-
     history = []
-    total_reward = 0
+    rewards = []
+    steps_taken = 0
+    done = False
+    error = None
 
-    for step in range(50):
-
-        action = get_action(obs, history)
-
-        response = requests.post(
-            f"{BASE_URL}/step",
-            json={"action": action},
-        )
-
+    for step in range(1, 51):
         try:
+            action = get_action(obs, history)
+            action_str = action["action_type"]
+
+            response = requests.post(
+                f"{BASE_URL}/step",
+                json={"action": action},
+            )
+
             res = response.json()
-        except:
-            print("ERROR:", response.text)
+        except Exception as e:
+            error = str(e)
+            log_step(step=step, action="error", reward=0.0, done=True, error=error)
             break
 
         if "observation" not in res:
-            print("INVALID:", res)
+            error = "Missing observation in response"
+            log_step(step=step, action=action_str, reward=0.0, done=True, error=error)
             break
 
         new_obs = res["observation"]
@@ -202,25 +226,33 @@ def run_task(task_id):
         reward = res.get("reward", 0)
         if isinstance(reward, dict):
             reward = reward.get("value", 0)
+        reward = float(reward) if reward else 0.0
 
-        total_reward += reward
+        done = res.get("done", False)
+        rewards.append(reward)
+        steps_taken = step
 
         outcome = "improved" if new_obs["distance_to_goal"] < obs["distance_to_goal"] else "worse"
 
         history.append({
             "step": step,
-            "action": action["action_type"],
+            "action": action_str,
             "outcome": outcome
         })
 
+        log_step(step=step, action=action_str, reward=reward, done=done, error=None)
+
         obs = new_obs
 
-        if res.get("done", False):
+        if done:
             break
 
-    return grade(task_id, obs, step + 1)
+    final_score = grade(task_id, obs, steps_taken)
+    final_score = max(0.0, min(1.0, final_score))  # Clamp to [0, 1]
+    
+    return final_score, rewards, steps_taken
 
-# ---------------- MAIN ----------------
+
 def calibrate_score(task, raw_score):
     if task == "green_corridor_easy":
         low, high = 0.85, 0.9
@@ -246,7 +278,8 @@ if __name__ == "__main__":
     results = {}
 
     for t in tasks:
-        results[t] = calibrate_score(t, run_task(t))
+        final_score, _, _ = run_task(t)
+        results[t] = calibrate_score(t, final_score)
 
     print("\nFINAL SCORES:")
     for k, v in results.items():
