@@ -11,7 +11,7 @@ load_dotenv()
 
 API_BASE_URL = os.getenv("API_BASE_URL")
 MODEL_NAME   = os.getenv("MODEL_NAME")
-HF_TOKEN     = os.getenv("HF_TOKEN")
+HF_TOKEN     = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
 BASE_URL     = "http://localhost:8000"
 BENCHMARK    = "chaos_engine"
 
@@ -147,7 +147,7 @@ def ask_llm(obs, history):
         except Exception as e:
             print("LLM ERROR:", e)
 
-    return "wait"  # minimal fallback
+    return random.choice(list(VALID_ACTIONS))
 
 # ---------------- ACTION ----------------
 
@@ -281,7 +281,6 @@ if __name__ == "__main__":
         final_score, _, _ = run_task(t)
         results[t] = calibrate_score(t, final_score)
 
-    print("\nFINAL SCORES:")
     for k, v in results.items():
         print(f"{k}: {v:.3f}")
 

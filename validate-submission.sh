@@ -1,9 +1,3 @@
-#!/usr/bin/env bash
-#
-# validate-submission.sh — OpenEnv Submission Validator
-#
-# Checks that your HF Space is live, Docker image builds, and openenv validate passes.
-
 set -uo pipefail
 
 DOCKER_BUILD_TIMEOUT=600
