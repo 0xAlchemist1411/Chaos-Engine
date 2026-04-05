@@ -388,35 +388,6 @@ By working with Chaos Engine, you'll learn:
 
 ---
 
-## 🤝 Contributing
-
-Contributions welcome! Areas for enhancement:
-
-- [ ] Add visualization dashboard for grid state
-- [ ] Implement curriculum learning (progressive difficulty)
-- [ ] Support multi-agent scenarios
-- [ ] Add priority vehicle types (ambulance > police > fire)
-- [ ] Implement partial observability
-- [ ] Generate synthetic traffic patterns
-
----
-
-## 📄 License
-
-MIT License - See LICENSE file for details
-
----
-
-## 🙋 Support
-
-For issues or questions:
-
-- Check the [OpenEnv documentation](https://openenv.ai/)
-- Review the validation script output for diagnostics
-- Test endpoints manually with `curl`
-
----
-
 ## 📊 Performance Benchmarks
 
 | Task              | Easy | Medium | Hard | Average  |
@@ -432,5 +403,3 @@ For issues or questions:
 **Live Demo**: [https://alchemist1411-chaosengine.hf.space](https://alchemist1411-chaosengine.hf.space)
 
 ---
-
-**Built with ❤️ for the OpenEnv Benchmark**
