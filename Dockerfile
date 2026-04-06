@@ -16,9 +16,12 @@ COPY . .
 
 ENV PYTHONPATH="/app:$PYTHONPATH"
 
-EXPOSE 8000
+# Make entrypoint executable
+RUN chmod +x start.sh
+
+EXPOSE 7860
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["bash", "start.sh"]
