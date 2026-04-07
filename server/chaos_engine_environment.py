@@ -17,7 +17,7 @@ class ChaosEngineEnvironment(Environment):
         random.seed(42)
 
         self.grid_size = 10
-        self.max_steps = 50
+        self.max_steps = 30
         self.task_id = "green_corridor_easy"
 
         self._state = State(episode_id=str(uuid4()), step_count=0)

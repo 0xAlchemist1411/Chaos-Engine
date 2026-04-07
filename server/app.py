@@ -16,8 +16,8 @@ app = create_app(
     max_concurrent_envs=2,
 )
 
-@app.get("/health")
-def health():
+@app.get("/")
+def root():
     return {"status": "ok"}
 
 @app.get("/render")

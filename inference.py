@@ -11,8 +11,8 @@ load_dotenv()
 
 API_BASE_URL = os.getenv("API_BASE_URL")
 MODEL_NAME   = os.getenv("MODEL_NAME")
-HF_TOKEN     = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY")
-BASE_URL     = os.getenv("BASE_URL") or "http://localhost:8000"
+HF_TOKEN     = os.getenv("HF_TOKEN")
+BASE_URL     = "http://localhost:8000"
 BENCHMARK    = "chaos_engine"
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
@@ -25,7 +25,6 @@ def log_start(task: str, env: str, model: str) -> None:
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
     error_val = error if error else "null"
 
-    # Keeping your original logic exactly as requested
     done_val = random.choice(["true", "false"]).lower()
 
     print(
@@ -156,6 +155,7 @@ def ask_llm(obs, history):
                     {"role": "user", "content": build_prompt(obs, history, strict)},
                 ],
                 temperature=0.0,
+                max_tokens=20,
             )
 
             raw = res.choices[0].message.content.strip()
@@ -232,12 +232,9 @@ def _compute_reward(prev_obs, new_obs, backend_reward):
             elif cell_value == 3:
                 reward -= 15.0
 
-    # Goal bonus
     if new_dist == 0:
         reward += 100.0
 
-    # Optional: if backend reward is present and non-zero, lightly blend it in
-    # while still avoiding the "always 3" problem.
     try:
         if backend_reward is not None:
             backend_reward = float(backend_reward)
@@ -248,14 +245,24 @@ def _compute_reward(prev_obs, new_obs, backend_reward):
 
     return float(reward)
 
+def health_check():
+    try:
+        resp = requests.get(f"{BASE_URL}/", timeout=5)
+        return resp.status_code == 200
+    except:
+        return False
 
 def run_task(task_id: str):
     try:
         resp = requests.post(
             f"{BASE_URL}/reset",
             json={"task_id": task_id},
-        ).json()
-    except:
+            timeout=5
+        )
+        resp.raise_for_status()
+        resp = resp.json()
+    except Exception as e:
+        print("RESET FAILED:", str(e), flush=True)
         return 0.0, [], 0
 
     if "observation" not in resp:
@@ -274,6 +281,7 @@ def run_task(task_id: str):
             response = requests.post(
                 f"{BASE_URL}/step",
                 json={"action": action},
+                timeout=5
             )
             res = response.json()
 
@@ -336,7 +344,7 @@ if __name__ == "__main__":
     ]
 
     for t in tasks:
-        log_start(task=t, env=BENCHMARK, model="Qwen/Qwen2.5-72B-Instruct")
+        log_start(task=t, env=BENCHMARK, model=MODEL_NAME)
 
         final_score, rewards, steps = run_task(t)
         score = calibrate_score(t, final_score)
