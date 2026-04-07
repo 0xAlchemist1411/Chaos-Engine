@@ -20,6 +20,10 @@ app = create_app(
 def root():
     return {"status": "ok"}
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 @app.get("/render")
 def render():
     env = ChaosEngineEnvironment()
@@ -31,7 +35,7 @@ def render():
 
 def main():
     import uvicorn
-    uvicorn.run("server.app:app", host="0.0.0.0", port=8000)
+    uvicorn.run("server.app:app", host="0.0.0.0", port=7860)
 
 
 if __name__ == "__main__":

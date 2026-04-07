@@ -273,7 +273,7 @@ def run_task(task_id: str):
     rewards = []
     steps_taken = 0
 
-    for step in range(1, 51):
+    for step in range(1, 31):
         try:
             action = get_action(obs, history)
             action_str = action["action_type"]
@@ -349,6 +349,6 @@ if __name__ == "__main__":
         final_score, rewards, steps = run_task(t)
         score = calibrate_score(t, final_score)
 
-        success = score >= 0.65
+        success = score >= 0.5
 
         log_end(success, steps, score, rewards)

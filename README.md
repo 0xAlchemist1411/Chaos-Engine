@@ -4,7 +4,7 @@ emoji: 🚦
 colorFrom: indigo
 colorTo: purple
 sdk: docker
-app_port: 8000
+app_port: 7860
 pinned: false
 license: mit
 ---
@@ -48,7 +48,7 @@ In modern cities, emergency vehicles waste critical seconds at every intersectio
 
 **Type**: OpenEnv HTTP Server  
 **Grid Size**: 10×10 city blocks  
-**Max Steps**: 50 per episode  
+**Max Steps**: 30 per episode  
 **Action Space**: Discrete (4 movements)  
 **Observation Space**: Structured JSON with grid state + metrics
 
@@ -154,7 +154,7 @@ MODEL_NAME=Qwen/Qwen2.5-72B-Instruct                 # LLM model identifier
 HF_TOKEN=hf_xxxxxxxxxxxxx                            # Your HuggingFace API token
 
 # Optional: Local server (if running locally)
-BASE_URL=http://localhost:8000                       # Server address
+BASE_URL=http://localhost:7860                       # Server address
 ```
 
 ---
@@ -174,9 +174,10 @@ docker run -it \
   -e API_BASE_URL="https://router.huggingface.co/v1" \
   -e MODEL_NAME="Qwen/Qwen2.5-72B-Instruct" \
   -e HF_TOKEN="hf_xxxxxxxxxxxxx" \
-  -p 8000:8000 \
+  -p 7860:7860 \
   chaos-engine:latest
 ```
+
 ---
 
 ## 🤖 Running Inference
@@ -186,13 +187,13 @@ docker run -it \
 **Option A: Docker (Recommended)**
 
 ```bash
-docker run -p 8000:8000 chaos-engine:latest
+docker run -p 7860:7860 chaos-engine:latest
 ```
 
 **Option B: Local with uvicorn**
 
 ```bash
-uvicorn server.app:app --host 0.0.0.0 --port 8000 --reload
+uvicorn server.app:app --host 0.0.0.0 --port 7860 --reload
 ```
 
 ### 2. Run Inference Script
@@ -250,15 +251,15 @@ chmod +x validate-submission.sh
 
 ```bash
 # Test server health
-curl -X GET http://localhost:8000/health
+curl -X GET http://localhost:7860/health
 
 # Test reset endpoint
-curl -X POST http://localhost:8000/reset \
+curl -X POST http://localhost:7860/reset \
   -H "Content-Type: application/json" \
   -d '{"task_id": "green_corridor_easy"}'
 
 # Test step endpoint
-curl -X POST http://localhost:8000/step \
+curl -X POST http://localhost:7860/step \
   -H "Content-Type: application/json" \
   -d '{"action": {"action_type": "move_down"}}'
 ```

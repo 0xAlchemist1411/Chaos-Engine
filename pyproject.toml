@@ -43,7 +43,7 @@ observation = "models.ChaosEngineObservation"
 
 [tool.openenv.server]
 app = "server.app:app"
-port = 8000
+port = 7860
 
 [[tool.openenv.tasks]]
 id = "green_corridor_easy"
