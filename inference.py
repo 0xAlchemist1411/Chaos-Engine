@@ -12,7 +12,7 @@ load_dotenv()
 API_BASE_URL = os.getenv("API_BASE_URL")
 MODEL_NAME   = os.getenv("MODEL_NAME")
 HF_TOKEN     = os.getenv("HF_TOKEN")
-BASE_URL     = "http://localhost:8000"
+BASE_URL     = "http://localhost:7860"
 BENCHMARK    = "chaos_engine"
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
